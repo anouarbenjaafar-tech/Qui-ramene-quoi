@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qui ramène quoi ?</title>
+<style>
+  :root { color-scheme: light; --ink:#20262e; --muted:#68717d; --line:#e4e8ed; --accent:#176b52; --soft:#eef7f2; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f5f7f8; color:var(--ink); font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 48px; }
+  header { padding:24px 22px; background:#173f35; color:white; border-radius:20px; margin-bottom:18px; }
+  h1 { margin:0 0 6px; font-size:clamp(1.7rem,5vw,2.3rem); line-height:1.1; }
+  header p { margin:8px 0 0; color:#e1eee8; }
+  section { background:white; border:1px solid var(--line); border-radius:16px; padding:18px; margin:14px 0; box-shadow:0 3px 12px #1b2a3510; }
+  h2 { margin:0 0 14px; font-size:1.15rem; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  label { display:block; font-size:.9rem; font-weight:650; margin-bottom:6px; }
+  input, select { width:100%; min-width:0; border:1px solid #cfd6dd; border-radius:10px; padding:12px; font:inherit; background:white; color:var(--ink); }
+  .field { margin-bottom:12px; }
+  button { border:0; border-radius:10px; padding:12px 15px; font:inherit; font-weight:700; cursor:pointer; }
+  .primary { background:var(--accent); color:white; width:100%; }
+  .secondary { background:var(--soft); color:var(--accent); }
+  .danger { background:#fff0ef; color:#a12d25; padding:8px 10px; font-size:.88rem; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; }
+  .actions button { flex:1; }
+  .entry { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:13px 0; border-bottom:1px solid var(--line); }
+  .entry:last-child { border-bottom:0; padding-bottom:0; }
+  .entry strong { display:block; }
+  .meta { color:var(--muted); font-size:.9rem; }
+  .empty { color:var(--muted); padding:8px 0; }
+  .hint { color:var(--muted); font-size:.88rem; margin:10px 0 0; }
+  .count { color:var(--muted); font-size:.9rem; font-weight:500; }
+  @media(max-width:520px) { .grid { grid-template-columns:1fr; gap:0; } main { padding:14px 12px 32px; } header { padding:22px 18px; } section { padding:15px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🍹 Qui ramène quoi ?</h1>
+    <p>On s’organise pour la soirée : ajoute ce que chacun apporte, puis partage le récap dans le groupe WhatsApp.</p>
+  </header>
+
+  <section>
+    <h2>Ajouter une contribution</h2>
+    <form id="entryForm">
+      <div class="grid">
+        <div class="field">
+          <label for="person">Qui apporte ?</label>
+          <input id="person" placeholder="Ex. Sarah" required maxlength="60">
+        </div>
+        <div class="field">
+          <label for="category">Catégorie</label>
+          <select id="category">
+            <option>À manger</option><option>Boissons</option><option>Apéro</option>
+            <option>Dessert</option><option>Matériel</option><option>Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label for="item">Quoi ?</label>
+          <input id="item" placeholder="Ex. chips, bière, salade…" required maxlength="100">
+        </div>
+        <div class="field">
+          <label for="quantity">Quantité (facultatif)</label>
+          <input id="quantity" placeholder="Ex. 2 bouteilles" maxlength="60">
+        </div>
+      </div>
+      <button class="primary" type="submit">＋ Ajouter à la liste</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>La liste <span class="count" id="count"></span></h2>
+    <div id="entries"><p class="empty">Rien pour le moment — ajoutez la première contribution !</p></div>
+    <p class="hint">La liste est conservée dans ce navigateur sur cet appareil. Pour que les autres la voient, partage le récap dans WhatsApp.</p>
+  </section>
+
+  <section>
+    <h2>Partager avec le groupe</h2>
+    <p class="meta">Le message reprend toutes les contributions enregistrées dans la liste ci-dessus.</p>
+    <div class="actions">
+      <button class="primary" type="button" id="whatsapp">Partager sur WhatsApp</button>
+      <button class="secondary" type="button" id="copy">Copier le récap</button>
+    </div>
+    <p class="hint" id="feedback" role="status" aria-live="polite"></p>
+  </section>
+</main>
+<script>
+(() => {
+  const form = document.getElementById('entryForm');
+  const person = document.getElementById('person');
+  const category = document.getElementById('category');
+  const item = document.getElementById('item');
+  const quantity = document.getElementById('quantity');
+  const entriesEl = document.getElementById('entries');
+  const countEl = document.getElementById('count');
+  const feedback = document.getElementById('feedback');
+  let entries = [];
+  try { entries = JSON.parse(localStorage.getItem('qui-ramene-quoi-v1') || '[]'); } catch (_) { entries = []; }
+
+  function save() {
+    try { localStorage.setItem('qui-ramene-quoi-v1', JSON.stringify(entries)); } catch (_) {}
+  }
+  function render() {
+    countEl.textContent = `(${entries.length})`;
+    entriesEl.replaceChildren();
+    if (!entries.length) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'Rien pour le moment — ajoutez la première contribution !';
+      entriesEl.appendChild(p);
+      return;
+    }
+    entries.forEach((entry, index) => {
+      const row = document.createElement('div'); row.className = 'entry';
+      const content = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = `${entry.item}${entry.quantity ? ' — ' + entry.quantity : ''}`;
+      const meta = document.createElement('div'); meta.className = 'meta';
+      meta.textContent = `${entry.person} · ${entry.category}`;
+      content.append(title, meta);
+      const remove = document.createElement('button'); remove.type = 'button';
+      remove.className = 'danger'; remove.textContent = 'Supprimer';
+      remove.setAttribute('aria-label', `Supprimer ${entry.item} apporté par ${entry.person}`);
+      remove.addEventListener('click', () => { entries.splice(index, 1); save(); render(); feedback.textContent = ''; });
+      row.append(content, remove); entriesEl.appendChild(row);
+    });
+  }
+  function recap() {
+    if (!entries.length) return '🍹 Soirée entre potes — qui ramène quoi ?\\n\\nLa liste est encore vide. Ajoutez vos contributions !';
+    const grouped = {};
+    entries.forEach(e => { (grouped[e.category] ||= []).push(e); });
+    const lines = ['🍹 *Soirée entre potes — qui ramène quoi ?*', ''];
+    Object.entries(grouped).forEach(([cat, items]) => {
+      lines.push(`*${cat}*`);
+      items.forEach(e => lines.push(`• ${e.person} : ${e.item}${e.quantity ? ' (' + e.quantity + ')' : ''}`));
+      lines.push('');
+    });
+    lines.push('Ajoutez votre contribution si vous n’avez pas encore indiqué ce que vous ramenez 🙌');
+    return lines.join('\\n');
+  }
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const p = person.value.trim(), i = item.value.trim();
+    if (!p || !i) return;
+    entries.push({ person:p, category:category.value, item:i, quantity:quantity.value.trim() });
+    save(); render(); form.reset(); person.focus();
+    feedback.textContent = 'Contribution ajoutée.';
+  });
+  document.getElementById('whatsapp').addEventListener('click', () => {
+    const text = recap();
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+    feedback.textContent = 'WhatsApp va s’ouvrir avec le récap prêt à envoyer.';
+  });
+  document.getElementById('copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(recap());
+      feedback.textContent = 'Récap copié ! Tu peux le coller dans le groupe WhatsApp.';
+    } catch (_) {
+      const area = document.createElement('textarea');
+      area.value = recap(); area.style.position = 'fixed'; area.style.opacity = '0';
+      document.body.appendChild(area); area.select();
+      const ok = document.execCommand('copy'); area.remove();
+      feedback.textContent = ok ? 'Récap copié ! Tu peux le coller dans le groupe WhatsApp.' : 'La copie automatique n’a pas fonctionné. Utilise le bouton WhatsApp.';
+    }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
